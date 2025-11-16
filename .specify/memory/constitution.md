@@ -1,50 +1,63 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+Sync Impact Report
+
+- Version change: 1.0.0 -> 1.1.0 (minor: 疎結合原則を追加)
+- Modified principles:
+  - 追加: 疎結合と明確なインターフェース
+  - 既存（文言整理）: 品質優先、インクリメンタル、明確な仕様、責任あるバージョニング、シンプルさ
+- Added sections: ガバナンス実務の明記
+- Removed sections: テンプレートのプレースホルダ（全て具体化済み）
+- Templates checked:
+  - .specify/templates/plan-template.md ✅ checked
+  - .specify/templates/spec-template.md ✅ checked
+  - .specify/templates/tasks-template.md ✅ checked
+  - .specify/templates/checklist-template.md ✅ checked
+  - .specify/templates/agent-file-template.md ✅ checked
+- Follow-up TODOs:
+  - なし
+-->
+
+# taskapp2 憲章
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### 品質優先（テストを重視）
+- ルール: 主要な機能はテスト可能でなければならない。単体テストと必要に応じた統合テストを用意すること。テストは実装より先に（テストファースト）作成することを強く推奨する。
+- 理由: バグの早期検出とリファクタリングの安全性を確保するため。
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### 小さく頻繁にリリース（インクリメンタル）
+- ルール: 変更は小さく分割し、独立してレビュー・デプロイ可能な単位で行うこと。大規模な一度きりのリリースは避ける。
+- 理由: リスク低減と早いフィードバックループを実現するため。
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### 明確な仕様とドキュメント
+- ルール: 仕様（spec）はユーザーストーリーと受入基準を含み、各機能は独立してテスト可能であること。実装に必要な前提・制約は明記すること。
+- 理由: 誤解を減らし、担当者交代時の知識移転を容易にするため。
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### 責任あるバージョニングと変更管理
+- ルール: 互換性に影響する変更はセマンティックバージョニングに従い、破壊的変更は明示的に通知・文書化し、移行手順を提供すること。
+- 理由: 利用者の信頼を保ち、依存関係の混乱を避けるため。
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### シンプルさと可読性
+- ルール: 実装は可能な限りシンプルに保つ。複雑さには正当な根拠を用意し、コードは可読性を最優先とする。
+- 理由: 保守性とオンボーディング効率を高めるため。
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+### 疎結合と明確なインターフェース
+- ルール: 各モジュールは疎結合（低い結合度）かつ明確に定義されたインターフェースを持つこと。モジュール間の依存は抽象（インターフェース/契約）を通じて行い、直接的な内部実装の参照や広範な副作用を避けること。
+- 実践例: 明確なAPI/契約ファイル、依存注入、インターフェース駆動設計、境界テストを用いる。横断的関心は小さなライブラリやミドルウェアで再利用可能にする。
+- 理由: モジュール単位の独立開発・テスト・リリースと長期的な保守性を確保するため。
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+## 追加制約
+- セキュリティ: 機密情報はソース管理に含めない。認証・認可が必要な箇所は明記し、安全な取り扱いを行うこと。
+- ライセンス: リポジトリ全体はプロジェクトのルートにあるライセンスに従うこと。
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
-
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+## 開発ワークフロー
+- 仕様作成 → 計画作成 → テスト定義 → 実装 → レビュー → マージ → リリース の順で進めること。
+- PR は少なくとも1人のレビュアー承認とCI通過を必須とする。
+- 重大な設計変更は事前に設計レビュー（設計ドキュメント）を行うこと。
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
+- 憲章の効力: 本憲章はプロジェクトの基本方針を定める。実務ルールはこの憲章に従うものとする。
+- 改定手続き: 憲章改定はプルリクエストで提案し、メンテナーチームの承認（少なくとも1名以上のプロジェクト責任者を含む合意）を得てマージする。重大な変更（原則の削除・再定義）はメジャーバージョンを上げる。
+- バージョニング方針: 本憲章のバージョンはセマンティックバージョニングを用いる。MAJOR: 後方互換性のない原則の削除/再定義。MINOR: 新原則の追加または主要方針の拡張。PATCH: 文言修正・明確化。
+- コンプライアンスレビュー: 主要なリリース時には憲章チェックを実施し、テンプレート（plan/spec/tasks）との整合性を確認すること。
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
-
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
