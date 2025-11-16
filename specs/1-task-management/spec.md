@@ -9,6 +9,7 @@
 
 ### Session 2025-11-16
 - Q: サブタスクは `Task` に `parent_task_id` を持たせる形で表現しますか、それとも別エンティティにしますか？ → A: `A`（`Task.parent_task_id` を用いる）
+ - Q: サブタスクがすべて完了したときに親タスクを自動で完了にしますか？ → A: `B`（デフォルトでは自動完了しない。UIで有効化オプションを提供する）
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -177,12 +178,15 @@ Response conventions:
 - Use standard HTTP status codes (200, 201, 204, 400, 404, 409, 500).
 - On validation errors return 400 with a structured body: `{ "errors": [{ "field": "title", "message": "required" }, ...] }`.
 
-### Business Rules / Domain Decisions
+-### Business Rules / Domain Decisions
 
 - Subtask → Parent interaction
-	- デフォルトポリシー: サブタスクをすべて完了しても親タスクの `status` は自動で `done` にしない（自動化はオプション）。UI上で「サブタスク完了時に親を自動完了する」切替を提供することは可能。
+  - 決定: 本セッションにより**デフォルトではサブタスク全完了時に親を自動完了しない**（Clarification: Session 2025-11-16）。
+  - オプション: UI 設定で「サブタスク完了で親を自動完了する」を有効化可能とする。実装時はこのフラグをアカウント／プロジェクト設定またはUIトグルとして提供できる。
+  - 理由: 自動化をデフォルトにすると誤判定で誤った完了が起きる可能性があるため、安全側のデフォルトを選択する。
+
 - Tag uniqueness
-	- タグ名はグローバルでユニーク（同名のタグを禁止）。代替案としては同名許可＋内部IDで区別だが、運用上の混乱を避けるためユニークを推奨。
+  - タグ名はグローバルでユニーク（同名のタグを禁止）。代替案としては同名許可＋内部IDで区別だが、運用上の混乱を避けるためユニークを推奨。
 - Deletion semantics
 	- タスク削除時: サブタスクはデフォルトで一括削除（soft-delete 推奨）。タグは削除しない（タグは多くのタスクで共有されるため）。
 - Concurrency
@@ -232,7 +236,12 @@ P1: サブタスク
 2. サブタスク完了の影響
 	- Given: 親に2つのサブタスク
 	- When: 両方完了にする
-	- Then: 親タスクは自動で `done` にならない（デフォルト）。UIで自動完了が有効な場合はそれを検証する別シナリオを用意。
+  - Then: 親タスクは自動で `done` にならない（デフォルト）。
+
+  - Additional scenario (auto-complete enabled)
+    - Given: 親に2つのサブタスク、かつプロジェクト設定またはUIで「サブタスク完了で親自動完了」が有効
+    - When: 両方のサブタスクを完了にする
+    - Then: 親タスクが `done` に遷移することを検証する。
 
 P2: タグとダッシュボード
 
