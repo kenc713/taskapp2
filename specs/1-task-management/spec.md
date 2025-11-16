@@ -5,6 +5,11 @@
 **Status**: Draft  
 **Input**: User description: "タスク管理アプリを作成したい。主要機能を以下に示す。①タスクのCRUD②サブタスク③タスクへのタグ付与およびタグの管理④各種ダッシュボード（期限切れのタスク/期限が近いタスク/すべてのタスク）"
 
+## Clarifications
+
+### Session 2025-11-16
+- Q: サブタスクは `Task` に `parent_task_id` を持たせる形で表現しますか、それとも別エンティティにしますか？ → A: `A`（`Task.parent_task_id` を用いる）
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - タスクの基本操作（Priority: P1）
@@ -85,7 +90,7 @@
 ## Key Entities *(include if feature involves data)*
 
 - **Task**: id, title, description, due_date, priority, status, tags[], parent_task_id?（親タスクの参照）
-- **Subtask**: id, title, status, parent_task_id
+	- 備考: 本仕様ではサブタスクは別テーブルの独立エンティティではなく、`Task.parent_task_id` による階層で表現する（Clarification: Session 2025-11-16）。
 - **Tag**: id, name, color?（表示用）
 
 ## Success Criteria *(mandatory)*
@@ -111,4 +116,152 @@
 ## Notes
 
 - 重大な未決点: マルチユーザー/共有タスク、通知やリマインダー機能は本フェーズに含めていない。必要なら別機能として追加する。
+
+## Detailed Design
+
+### Data Model (suggested)
+
+Entities and example fields (types are suggested):
+
+- Task
+  - `id` (UUID)
+  - `title` (string, required)
+  - `description` (string, optional)
+  - `due_date` (datetime, optional)
+  - `priority` (enum: low/medium/high, default: medium)
+  - `status` (enum: todo/in_progress/done, default: todo)
+  - `parent_task_id` (UUID, nullable) — for hierarchical tasks (task/subtask relationship represented here)
+  - `created_at` (datetime)
+  - `updated_at` (datetime)
+  - `version` (integer) — optimistic locking
+
+- Tag
+  - `id` (UUID)
+  - `name` (string, unique)
+  - `color` (string, optional)
+
+- TaskTag (join table)
+  - `task_id` (UUID)
+  - `tag_id` (UUID)
+
+Notes:
+- Subtask は別テーブルではなく `Task.parent_task_id` により表現する（Clarification: Session 2025-11-16）。これによりタグやフィルタが共通で扱いやすくなる。
+- Use a relational schema (e.g., PostgreSQL) for strong consistency and queryability. Index `due_date`, `status`, `parent_task_id` and `tag_id` for dashboards and filters.
+- Use `version` or `updated_at` for optimistic concurrency control to prevent lost updates.
+
+
+### API / Endpoints (REST-style, can be adapted to GraphQL)
+
+- Tasks
+  - `GET /api/tasks` — list tasks; support query params: `?status=&tag=&due_before=&due_after=&limit=&offset=&sort=`
+  - `POST /api/tasks` — create task (body: title, description, due_date, priority, parent_task_id)
+  - `GET /api/tasks/{id}` — retrieve
+  - `PUT /api/tasks/{id}` — update (support partial updates via PATCH if desired)
+  - `DELETE /api/tasks/{id}` — delete
+
+  - Notes on subtasks: サブタスクは `Task.parent_task_id` により表現する（Clarification: Session 2025-11-16）。サブタスクを作成するには `POST /api/tasks` に `parent_task_id` を含めて作成することを推奨する。
+  - 互換性のため、`POST /api/tasks/{task_id}/subtasks` をエイリアス的に実装してもよい（内部的には `POST /api/tasks` に `parent_task_id=task_id` を付与する処理とする）。
+
+- Tags
+  - `GET /api/tags`
+  - `POST /api/tags` — create tag (enforce unique `name`)
+  - `PUT /api/tags/{id}` — update
+  - `DELETE /api/tags/{id}` — delete (consider cascade / orphan handling)
+
+- Dashboards / Filters
+  - `GET /api/dashboard/overdue` — 期限切れタスク
+  - `GET /api/dashboard/due-soon?days=7` — 期限が近いタスク
+  - `GET /api/dashboard/all` — すべてのタスク（ページネーション対応）
+
+Response conventions:
+- Use standard HTTP status codes (200, 201, 204, 400, 404, 409, 500).
+- On validation errors return 400 with a structured body: `{ "errors": [{ "field": "title", "message": "required" }, ...] }`.
+
+### Business Rules / Domain Decisions
+
+- Subtask → Parent interaction
+	- デフォルトポリシー: サブタスクをすべて完了しても親タスクの `status` は自動で `done` にしない（自動化はオプション）。UI上で「サブタスク完了時に親を自動完了する」切替を提供することは可能。
+- Tag uniqueness
+	- タグ名はグローバルでユニーク（同名のタグを禁止）。代替案としては同名許可＋内部IDで区別だが、運用上の混乱を避けるためユニークを推奨。
+- Deletion semantics
+	- タスク削除時: サブタスクはデフォルトで一括削除（soft-delete 推奨）。タグは削除しない（タグは多くのタスクで共有されるため）。
+- Concurrency
+	- クライアントは `version` または `updated_at` を持ち、更新時にチェックして競合を検出（409 Conflict）。競合解決はクライアントに任せ、必要ならマージUIを提供。
+
+### Validation rules
+
+- `title`: 非空、最大長 255
+- `due_date`: 将来日または許容する過去日（期限切れの追跡のため過去日を許容）
+- `priority`: 事前定義の列挙値のみ
+
+### Pagination / Sorting
+
+- Use `limit`/`offset` or keyset pagination for large lists. Default `limit=50`, `max_limit=200`.
+- Default sort: `due_date ASC, priority DESC` for dashboards where applicable.
+
+### Error & Edge Handling
+
+- Handle absent `due_date`: show in 'no due date' bucket or at end of sorted lists.
+- For large number of subtasks, paginate or collapse in UI; API supports `GET /api/tasks/{id}/subtasks?limit=&offset=`.
+
+### Acceptance Test Specifications (concrete)
+
+P1: タスクCRUD
+
+1. 新規作成
+	- Pre: empty list
+	- Action: `POST /api/tasks` with `{ "title": "買い物", "due_date": "2025-11-20T12:00:00Z" }`
+	- Expect: 201 Created, response contains `id`, `title`, `due_date`.
+	- Follow-up: `GET /api/tasks` returns created task.
+
+2. 更新
+	- Pre: existing task
+	- Action: `PUT /api/tasks/{id}` with updated `title` and `priority`
+	- Expect: 200 OK, fields changed. `updated_at` advanced.
+
+3. 削除
+	- Action: `DELETE /api/tasks/{id}`
+	- Expect: 204 No Content, subsequent `GET /api/tasks/{id}` returns 404.
+
+P1: サブタスク
+
+1. 追加
+	- Action: `POST /api/tasks/{task_id}/subtasks` with `{ "title": "買い物: 卵" }`
+	- Expect: 201 Created, subtask returned and visible via `GET /api/tasks/{task_id}/subtasks`.
+
+2. サブタスク完了の影響
+	- Given: 親に2つのサブタスク
+	- When: 両方完了にする
+	- Then: 親タスクは自動で `done` にならない（デフォルト）。UIで自動完了が有効な場合はそれを検証する別シナリオを用意。
+
+P2: タグとダッシュボード
+
+1. タグ作成とフィルタ
+	- Action: `POST /api/tags` と `POST /api/tasks/{id}` にタグを指定
+	- Expect: `GET /api/tasks?tag=urgent` により該当タスクのみ返る。
+
+2. ダッシュボード
+	- Create tasks with due dates: one past, one within 7 days, others later
+	- `GET /api/dashboard/overdue` returns only past-due tasks
+	- `GET /api/dashboard/due-soon?days=7` returns tasks within 7 days
+
+### Non-Functional Requirements
+
+- Performance: 平常時 p95 レイテンシ < 200ms for `GET /api/tasks` with typical page sizes (limit<=50).
+- Scale: 単一インスタンスで1万件のタスクを扱えることを目安に設計。将来的にシャーディング/分割を検討。
+- Availability: 計画フェーズでは高可用構成はオプション（要件に応じて設計）。
+- Observability: 主要 API のカウント、レイテンシ、エラー率をメトリクスとして収集。リクエスト/エラーは構造化ログに残す。
+- Security: 本フェーズは単一テナント仮定。将来的に認証（OAuth2/JWT 等）を追加する。機密情報は環境変数やシークレットストアに保存。
+
+### Implementation Notes (modularity / loose coupling)
+
+- アーキテクチャ: プレゼンテーション (UI)・API 層・サービス層・データ層を明確に分離することで疎結合を確保する。
+- インターフェース: サービス間は明確なインターフェース（契約）を用い、直接内部実装に依存しない（依存注入を活用）。
+- テスト: 単体テスト（サービス単位）と契約テスト（API 契約）を充実させ、統合テストでエンドツーエンドシナリオを検証する。
+
+### Next steps
+
+- 確認: 上記の詳細で問題ないか確認してください（特にサブタスク→親タスク動作、タグの一意性、削除ポリシー）。
+- 承認後: `/speckit.plan` を実行して実装タスクに分解します。
+
 
